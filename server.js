@@ -1,4 +1,5 @@
-// server.js
+
+ // server.js
 
 const dns = require('dns')
 dns.setServers(['8.8.8.8', '8.8.4.4'])
@@ -6,6 +7,7 @@ dns.setServers(['8.8.8.8', '8.8.4.4'])
 require('dotenv').config()
 
 const express = require('express')
+const mongoose = require('mongoose')
 const connectDB = require('./config/db')
 const seedHeroImages = require('./backgroundImages')
 const heroImageRoutes = require('./routes/heroImageRoutes')
@@ -32,6 +34,65 @@ const loginLimiter = rateLimit({
 app.use(express.json())
 app.use(cors())
 
+// Basic backend status
+app.get('/', (req, res) => {
+  res.status(200).json({
+    success: true,
+    service: 'Atelier Backend',
+    status: 'running',
+    message: 'Atelier Backend is running',
+    environment: process.env.NODE_ENV || 'development',
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString()
+  })
+})
+
+// Liveness check: confirms the server is running
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    success: true,
+    service: 'Atelier Backend',
+    status: 'healthy',
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString()
+  })
+})
+
+// Readiness check: confirms MongoDB is connected and responsive
+app.get('/health/ready', async (req, res) => {
+  try {
+    if (mongoose.connection.readyState !== 1 || !mongoose.connection.db) {
+      return res.status(503).json({
+        success: false,
+        service: 'Atelier Backend',
+        status: 'not_ready',
+        database: 'disconnected',
+        timestamp: new Date().toISOString()
+      })
+    }
+
+    await mongoose.connection.db.admin().ping()
+
+    return res.status(200).json({
+      success: true,
+      service: 'Atelier Backend',
+      status: 'ready',
+      database: 'connected',
+      uptime: Math.floor(process.uptime()),
+      timestamp: new Date().toISOString()
+    })
+  } catch (error) {
+    return res.status(503).json({
+      success: false,
+      service: 'Atelier Backend',
+      status: 'not_ready',
+      database: 'unavailable',
+      timestamp: new Date().toISOString()
+    })
+  }
+})
+
+// Existing API routes
 app.use('/api/v1', heroImageRoutes)
 
 // Apply the rate limiter to specific routes
@@ -41,10 +102,6 @@ app.use('/api/v1/admin/login-password', loginLimiter)
 
 app.use('/api/v1', subscriberRoutes)
 app.use('/api/v1', adminRoutes)
-
-app.get('/', (req, res) => {
-  res.send('Atelier backend is running')
-})
 
 const PORT = process.env.PORT || 5000
 
