@@ -1,5 +1,4 @@
-
- // server.js
+// server.js
 
 const dns = require('dns')
 dns.setServers(['8.8.8.8', '8.8.4.4'])
@@ -18,7 +17,11 @@ const rateLimit = require('express-rate-limit')
 
 const app = express()
 
-// Define the limiter BEFORE using it below
+// Render sits behind a proxy. Without this, the rate limiters
+// can't read the visitor's real IP and log X-Forwarded-For errors.
+app.set('trust proxy', 1)
+
+// Define the limiters BEFORE using them below
 const contactLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
@@ -32,7 +35,17 @@ const loginLimiter = rateLimit({
 })
 
 app.use(express.json())
-app.use(cors())
+
+// Only these origins may call the API from a browser.
+// FRONTEND_URL is your live Cloudflare URL, set in Render's Environment tab.
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'http://localhost:5173',
+].filter(Boolean)
+
+app.use(cors({
+  origin: allowedOrigins,
+}))
 
 // Basic backend status
 app.get('/', (req, res) => {
@@ -95,7 +108,7 @@ app.get('/health/ready', async (req, res) => {
 // Existing API routes
 app.use('/api/v1', heroImageRoutes)
 
-// Apply the rate limiter to specific routes
+// Apply the rate limiters to specific routes
 app.use('/api/v1/contact', contactLimiter)
 app.use('/api/v1/admin/login-pin', loginLimiter)
 app.use('/api/v1/admin/login-password', loginLimiter)
