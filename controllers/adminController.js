@@ -320,12 +320,32 @@ const generateCode = () =>
 // Sends an OTP for any purpose (signup, password-reset, pin-reset)
 const sendOtp = async (req, res) => {
   try {
-    const { email, purpose } = req.body
+    const { email, purpose, signupType } = req.body
 
     if (!validator.isEmail(email)) {
-      return res.status(400).json({
-        message: 'Please enter a valid email address'
-      })
+      return res.status(400).json({ message: 'Please enter a valid email address' })
+    }
+
+    // Extra checks only for account signup
+    if (purpose === 'signup') {
+      if (signupType === 'admin') {
+        const isWhitelisted = await AllowedAdmin.findOne({ email })
+        if (!isWhitelisted) {
+          return res.status(403).json({ message: 'This email is not authorized to sign up' })
+        }
+      } else if (signupType === 'owner') {
+        const ownerExists = await Admin.findOne({ isOwner: true })
+        if (ownerExists) {
+          return res.status(400).json({ message: 'An Owner account already exists' })
+        }
+      } else {
+        return res.status(400).json({ message: 'Invalid signup type' })
+      }
+
+      const existing = await Admin.findOne({ email })
+      if (existing) {
+        return res.status(400).json({ message: 'An account with this email already exists' })
+      }
     }
 
     const code = generateCode()
